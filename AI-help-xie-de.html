@@ -1,202 +1,250 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Image to HEX</title>
-  <style>
-    #hexOutput {
-      width: 100%;
-      height: 200px;
-      white-space: pre-wrap;
-      overflow: auto;
-    }
-    #svgOutput {
-      transform-origin: 0 0;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image to HEX</title>
+    <style>
+        #hexOutput {
+            width: 100%;
+            height: 200px;
+            white-space: pre-wrap;
+            overflow: auto;
+        }
+
+        #svgOutput {
+            transform-origin: 0 0;
+        }
+    </style>
 </head>
+
 <body>
-  <input type="file" accept="image/*" id="imageInput" onchange="handleImage()">
-  <button onclick="copyToClipboard()">Copy to Clipboard</button>
-  <textarea id="hexOutput" onchange="handleHexInput()"></textarea>
-  <input type="text" id="widthInput" value="20" onchange="handleWidthInput()">
-  <button onclick="zoomIn()">Zoom In</button>
-  <button onclick="zoomOut()">Zoom Out</button>
-  
-  <input type="text" id="zoomInput" value="100%" onchange="handleZoomInput()">
-  <input type="range" id="zoomSlider" min="5" max="200" value="100" onchange="handleZoomSlider()">
-  <div id="svgOutput"></div>
-  <script>
-    const state = {
-      scale: 1,
-    };
+    <input type="file" accept="image/*" id="imageInput" onchange="handleImage()">
+    <p>
+        <input type="radio" id="weighted" name="conversion" onclick="handleImage()" checked>
+        <label for="weighted">颜色加权平均法</label><br>
+        <input type="radio" id="average" name="conversion" onclick="handleImage()">
+        <label for="average">平均法</label><br>
+        <input type="radio" id="maximum" name="conversion" onclick="handleImage()">
+        <label for="maximum">最大值法</label><br>
+        <input type="radio" id="minimum" name="conversion" onclick="handleImage()">
+        <label for="minimum">最小值法</label><br>
+        <input type="radio" id="desaturation" name="conversion" onclick="handleImage()">
+        <label for="desaturation">去饱和度法</label><br>
+    </p>
+    <input type="color" id="colorPicker" value="#00ff00" onchange="handleColorInput()">
+    <button onclick="copyToClipboard()">Copy to Clipboard</button>
+    <textarea id="hexOutput" onchange="handleHexInput()"></textarea>
+    <input type="text" id="widthInput" value="20" onchange="handleWidthInput()">
+    <button onclick="zoomIn()">Zoom In</button>
+    <button onclick="zoomOut()">Zoom Out</button>
+    <input type="text" id="zoomInput" value="100%" onchange="handleZoomInput()">
+    <input type="range" id="zoomSlider" min="5" max="200" value="100" onchange="handleZoomSlider()">
+    <div id="svgOutput"></div>
 
-    function createRect(x, y, color) {
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
-      rect.setAttribute('x', x * 10);
-      rect.setAttribute('y', y * 10);
-      rect.setAttribute('width', 10);
-      rect.setAttribute('height', 10);
-      rect.setAttribute('fill', `rgb(${color * 17}, ${color * 17}, ${color * 17})`);
-      return rect;
-    }
-
-    function handleImage() {
-      const input = document.getElementById('imageInput');
-      const hexOutput = document.getElementById('hexOutput');
-      const svgOutput = document.getElementById('svgOutput');
-
-      const file = input.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        const image = new Image();
-        image.onload = function () {
-          const canvas = document.createElement('canvas');
-          canvas.width = image.width;
-          canvas.height = image.height;
-          const ctx = canvas.getContext('2d');
-          ctx.drawImage(image, 0, 0);
-
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-
-          const hexValues = [];
-          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-          svg.setAttribute('width', image.width * 10);
-          svg.setAttribute('height', image.height * 10);
-
-          for (let i = 0; i < imageData.length; i += 8) {
-            const r1 = imageData[i];
-            const g1 = imageData[i + 1];
-            const b1 = imageData[i + 2];
-
-            const r2 = imageData[i + 4];
-            const g2 = imageData[i + 5];
-            const b2 = imageData[i + 6];
-
-            // Convert RGB to grayscale
-            const gray1 = Math.round((0.299 * r1 + 0.587 * g1 + 0.114 * b1) * 15 / 255);
-            const gray2 = Math.round((0.299 * r2 + 0.587 * g2 + 0.114 * b2) * 15 / 255);
-
-            // Combine two 4-bit grayscale values into one byte
-            const hexValue = (gray1 << 4) | gray2;
-            hexValues.push(`0x${hexValue.toString(16).padStart(2, '0')}`);
-
-            // Create a rectangle for each pixel
-            const rect1 = createRect(i / 4 % image.width, Math.floor(i / 4 / image.width), gray1);
-            svg.appendChild(rect1);
-
-            const rect2 = createRect((i / 4 + 1) % image.width, Math.floor((i / 4 + 1) / image.width), gray2);
-            svg.appendChild(rect2);
-          }
-
-          hexOutput.value = hexValues.join(', ');
-          svgOutput.textContent = '';
-          svgOutput.appendChild(svg);
-          document.getElementById('widthInput').value = image.width;
+    <script>
+        const state = {
+            scale: 1,
+            color: '#00ff00',
         };
-        image.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
-    }
+        function handleColorInput() {
+            const colorPicker = document.getElementById('colorPicker');
+            state.color = colorPicker.value;
+            handleImage();
+        }
 
-    function handleHexInput() {
-      const hexOutput = document.getElementById('hexOutput');
-      const svgOutput = document.getElementById('svgOutput');
+        function createRect(x, y, intensity) {
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', x * 10);
+            rect.setAttribute('y', y * 10);
+            rect.setAttribute('width', 10);
+            rect.setAttribute('height', 10);
+            const hexColor = parseInt(state.color.replace('#', ''), 16);
+            const r = (hexColor >> 16 & 255) * intensity / 15;
+            const g = (hexColor >> 8 & 255) * intensity / 15;
+            const b = (hexColor & 255) * intensity / 15;
+            rect.setAttribute('fill', `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`);
+            return rect;
+        }
 
-      if (!hexOutput.value.trim()) {
-        svgOutput.textContent = '';
-        return;
-      }
+        function handleImage() {
+            const input = document.getElementById('imageInput');
+            const hexOutput = document.getElementById('hexOutput');
+            const svgOutput = document.getElementById('svgOutput');
 
-      const hexValues = hexOutput.value.split(',').map(value => parseInt(value.trim(), 16));
-      const width = parseInt(document.getElementById('widthInput').value);
-      if (isNaN(width) || width <= 0) {
-        alert('Invalid width');
-        return;
-      }
-      const totalPixels = hexValues.length * 2;
-      const height = Math.ceil(totalPixels / width);
+            const file = input.files[0];
+            if (!file) return;
 
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('width', width * 10);
-      svg.setAttribute('height', height * 10);
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const image = new Image();
+                image.onload = function () {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = image.width;
+                    canvas.height = image.height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(image, 0, 0);
 
-      for (let i = 0; i < hexValues.length; i++) {
-        const hexValue = hexValues[i];
-        const gray1 = hexValue >> 4;
-        const gray2 = hexValue & 0xF;
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+                    const hexValues = [];
+                    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    svg.setAttribute('width', image.width * 10);
+                    svg.setAttribute('height', image.height * 10);
 
-        const rect1 = createRect(i * 2 % width, Math.floor(i * 2 / width), gray1);
-        svg.appendChild(rect1);
+                    for (let i = 0; i < imageData.length; i += 8) {
+                        const r1 = imageData[i];
+                        const g1 = imageData[i + 1];
+                        const b1 = imageData[i + 2];
+                        const r2 = imageData[i + 4];
+                        const g2 = imageData[i + 5];
+                        const b2 = imageData[i + 6];
 
-        const rect2 = createRect((i * 2 + 1) % width, Math.floor((i * 2 + 1) / width), gray2);
-        svg.appendChild(rect2);
-      }
+                        const isChecked = document.querySelector('input[name="conversion"]:checked')
 
-      svgOutput.textContent = '';
-      svgOutput.appendChild(svg);
-    }
+                        let gray1, gray2
+                        switch (isChecked.id) {
+                            case 'average':
+                                gray1 = (r1 + g1 + b1) / 3;
+                                gray2 = (r2 + g2 + b2) / 3;
+                                break;
+                            case 'maximum':
+                                gray1 = Math.max(r1, g1, b1);
+                                gray2 = Math.max(r2, g2, b2);
+                                break;
+                            case 'minimum':
+                                gray1 = Math.min(r1, g1, b1);
+                                gray2 = Math.min(r2, g2, b2);
+                                break;
+                            case 'desaturation':
+                                gray1 = (Math.max(r1, g1, b1) + Math.min(r1, g1, b1)) / 2;
+                                gray2 = (Math.max(r2, g2, b2) + Math.min(r2, g2, b2)) / 2;
+                                break;
+                            default:
+                                gray1 = 0.299 * r1 + 0.587 * g1 + 0.114 * b1;
+                                gray2 = 0.299 * r2 + 0.587 * g2 + 0.114 * b2;
+                        }
 
-    function handleWidthInput() {
-      handleHexInput();
-    }
+                        gray1 = Math.round(gray1 * 15 / 255);
+                        gray2 = Math.round(gray2 * 15 / 255);
 
-    function copyToClipboard() {
-      const hexOutput = document.getElementById('hexOutput');
-      hexOutput.select();
-      document.execCommand('copy');
-    }
+                        const hexValue = (gray1 << 4) | gray2;
+                        hexValues.push(`0x${hexValue.toString(16).padStart(2, '0')}`);
+                        const rect1 = createRect(i / 4 % image.width, Math.floor(i / 4 / image.width), gray1);
+                        svg.appendChild(rect1);
+                        const rect2 = createRect((i / 4 + 1) % image.width, Math.floor((i / 4 + 1) / image.width), gray2);
+                        svg.appendChild(rect2);
+                    }
 
-    function zoomIn() {
-      state.scale *= 1.1;
-      applyZoom();
-    }
+                    hexOutput.value = hexValues.join(', ');
+                    svgOutput.textContent = '';
+                    svgOutput.appendChild(svg);
+                    document.getElementById('widthInput').value = image.width;
+                };
 
-    function zoomOut() {
-      state.scale /= 1.1;
-      applyZoom();
-    }
+                image.src = e.target.result;
+            }
 
-    function handleZoomInput() {
-      const zoomInput = document.getElementById('zoomInput');
-      state.scale = parseFloat(zoomInput.value) / 100;
-      applyZoom();
-    }
+            reader.readAsDataURL(file);
+        }
 
-    function handleZoomSlider() {
-      const zoomSlider = document.getElementById('zoomSlider');
-      state.scale = zoomSlider.value / 100;
-      applyZoom();
-    }
+        function handleHexInput() {
+            const hexOutput = document.getElementById('hexOutput');
+            const svgOutput = document.getElementById('svgOutput');
 
-    function applyZoom() {
-      document.getElementById('svgOutput').style.transform = `scale(${state.scale})`;
-      document.getElementById('zoomInput').value = `${Math.round(state.scale * 100)}%`;
-      document.getElementById('zoomSlider').value = Math.round(state.scale * 100);
-    }
+            if (!hexOutput.value.trim()) {
+                svgOutput.textContent = '';
+                return;
+            }
 
-    const widthInput = document.getElementById('widthInput');
+            const hexValues = hexOutput.value.split(',').map(value => parseInt(value.trim(), 16));
+            const width = parseInt(document.getElementById('widthInput').value);
+            if (isNaN(width) || width <= 0) {
+                alert('Invalid width');
+                return;
+            }
+            const totalPixels = hexValues.length * 2;
+            const height = Math.ceil(totalPixels / width);
 
-    widthInput.addEventListener('keydown', function(event) {
-      let value = parseInt(this.value);
-      switch (event.key) {
-        case 'ArrowUp':
-        case 'ArrowRight':
-          this.value = isNaN(value) ? 1 : value + 1;
-          event.preventDefault();
-          handleWidthInput();
-          break;
-        case 'ArrowDown':
-        case 'ArrowLeft':
-          this.value = isNaN(value) || value <= 1 ? 1 : value - 1;
-          event.preventDefault();
-          handleWidthInput();
-          break;
-      }
-    });
-  </script>
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', width * 10);
+            svg.setAttribute('height', height * 10);
+
+            for (let i = 0; i < hexValues.length; i++) {
+                const hexValue = hexValues[i];
+                const gray1 = hexValue >> 4;
+                const gray2 = hexValue & 0xF;
+
+                const rect1 = createRect(i * 2 % width, Math.floor(i * 2 / width), gray1);
+                svg.appendChild(rect1);
+
+                const rect2 = createRect((i * 2 + 1) % width, Math.floor((i * 2 + 1) / width), gray2);
+                svg.appendChild(rect2);
+            }
+
+            svgOutput.textContent = '';
+            svgOutput.appendChild(svg);
+        }
+
+        function handleWidthInput() {
+            handleHexInput();
+        }
+
+        function copyToClipboard() {
+            const hexOutput = document.getElementById('hexOutput');
+            hexOutput.select();
+            document.execCommand('copy');
+        }
+
+        function zoomIn() {
+            state.scale *= 1.1;
+            applyZoom();
+        }
+
+        function zoomOut() {
+            state.scale /= 1.1;
+            applyZoom();
+        }
+
+        function handleZoomInput() {
+            const zoomInput = document.getElementById('zoomInput');
+            state.scale = parseFloat(zoomInput.value) / 100;
+            applyZoom();
+        }
+
+        function handleZoomSlider() {
+            const zoomSlider = document.getElementById('zoomSlider');
+            state.scale = zoomSlider.value / 100;
+            applyZoom();
+        }
+
+        function applyZoom() {
+            document.getElementById('svgOutput').style.transform = `scale(${state.scale})`;
+            document.getElementById('zoomInput').value = `${Math.round(state.scale * 100)}%`;
+            document.getElementById('zoomSlider').value = Math.round(state.scale * 100);
+        }
+
+        const widthInput = document.getElementById('widthInput');
+
+        widthInput.addEventListener('keydown', function (event) {
+            let value = parseInt(this.value);
+            switch (event.key) {
+                case 'ArrowUp':
+                case 'ArrowRight':
+                    this.value = isNaN(value) ? 1 : value + 1;
+                    event.preventDefault();
+                    handleWidthInput();
+                    break;
+                case 'ArrowDown':
+                case 'ArrowLeft':
+                    this.value = isNaN(value) || value <= 1 ? 1 : value - 1;
+                    event.preventDefault();
+                    handleWidthInput();
+                    break;
+            }
+        });
+
+    </script>
 </body>
+
 </html>
