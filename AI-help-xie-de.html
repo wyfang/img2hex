@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image to HEX</title>
+  <style>
+    #hexOutput {
+      width: 100%;
+      height: 200px;
+      white-space: pre-wrap;
+      overflow: auto;
+    }
+    #svgOutput {
+      transform-origin: 0 0;
+    }
+  </style>
+</head>
+<body>
+  <input type="file" accept="image/*" id="imageInput" onchange="handleImage()">
+  <button onclick="copyToClipboard()">Copy to Clipboard</button>
+  <textarea id="hexOutput" onchange="handleHexInput()"></textarea>
+  <input type="text" id="widthInput" value="20" onchange="handleWidthInput()">
+  <button onclick="zoomIn()">Zoom In</button>
+  <button onclick="zoomOut()">Zoom Out</button>
+  
+  <input type="text" id="zoomInput" value="100%" onchange="handleZoomInput()">
+  <input type="range" id="zoomSlider" min="5" max="200" value="100" onchange="handleZoomSlider()">
+  <div id="svgOutput"></div>
+  <script>
+    const state = {
+      scale: 1,
+    };
+
+    function createRect(x, y, color) {
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('x', x * 10);
+      rect.setAttribute('y', y * 10);
+      rect.setAttribute('width', 10);
+      rect.setAttribute('height', 10);
+      rect.setAttribute('fill', `rgb(${color * 17}, ${color * 17}, ${color * 17})`);
+      return rect;
+    }
+
+    function handleImage() {
+      const input = document.getElementById('imageInput');
+      const hexOutput = document.getElementById('hexOutput');
+      const svgOutput = document.getElementById('svgOutput');
+
+      const file = input.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        const image = new Image();
+        image.onload = function () {
+          const canvas = document.createElement('canvas');
+          canvas.width = image.width;
+          canvas.height = image.height;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(image, 0, 0);
+
+          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+
+          const hexValues = [];
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('width', image.width * 10);
+          svg.setAttribute('height', image.height * 10);
+
+          for (let i = 0; i < imageData.length; i += 8) {
+            const r1 = imageData[i];
+            const g1 = imageData[i + 1];
+            const b1 = imageData[i + 2];
+
+            const r2 = imageData[i + 4];
+            const g2 = imageData[i + 5];
+            const b2 = imageData[i + 6];
+
+            // Convert RGB to grayscale
+            const gray1 = Math.round((0.299 * r1 + 0.587 * g1 + 0.114 * b1) * 15 / 255);
+            const gray2 = Math.round((0.299 * r2 + 0.587 * g2 + 0.114 * b2) * 15 / 255);
+
+            // Combine two 4-bit grayscale values into one byte
+            const hexValue = (gray1 << 4) | gray2;
+            hexValues.push(`0x${hexValue.toString(16).padStart(2, '0')}`);
+
+            // Create a rectangle for each pixel
+            const rect1 = createRect(i / 4 % image.width, Math.floor(i / 4 / image.width), gray1);
+            svg.appendChild(rect1);
+
+            const rect2 = createRect((i / 4 + 1) % image.width, Math.floor((i / 4 + 1) / image.width), gray2);
+            svg.appendChild(rect2);
+          }
+
+          hexOutput.value = hexValues.join(', ');
+          svgOutput.textContent = '';
+          svgOutput.appendChild(svg);
+          document.getElementById('widthInput').value = image.width;
+        };
+        image.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function handleHexInput() {
+      const hexOutput = document.getElementById('hexOutput');
+      const svgOutput = document.getElementById('svgOutput');
+
+      if (!hexOutput.value.trim()) {
+        svgOutput.textContent = '';
+        return;
+      }
+
+      const hexValues = hexOutput.value.split(',').map(value => parseInt(value.trim(), 16));
+      const width = parseInt(document.getElementById('widthInput').value);
+      if (isNaN(width) || width <= 0) {
+        alert('Invalid width');
+        return;
+      }
+      const totalPixels = hexValues.length * 2;
+      const height = Math.ceil(totalPixels / width);
+
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('width', width * 10);
+      svg.setAttribute('height', height * 10);
+
+      for (let i = 0; i < hexValues.length; i++) {
+        const hexValue = hexValues[i];
+        const gray1 = hexValue >> 4;
+        const gray2 = hexValue & 0xF;
+
+        const rect1 = createRect(i * 2 % width, Math.floor(i * 2 / width), gray1);
+        svg.appendChild(rect1);
+
+        const rect2 = createRect((i * 2 + 1) % width, Math.floor((i * 2 + 1) / width), gray2);
+        svg.appendChild(rect2);
+      }
+
+      svgOutput.textContent = '';
+      svgOutput.appendChild(svg);
+    }
+
+    function handleWidthInput() {
+      handleHexInput();
+    }
+
+    function copyToClipboard() {
+      const hexOutput = document.getElementById('hexOutput');
+      hexOutput.select();
+      document.execCommand('copy');
+    }
+
+    function zoomIn() {
+      state.scale *= 1.1;
+      applyZoom();
+    }
+
+    function zoomOut() {
+      state.scale /= 1.1;
+      applyZoom();
+    }
+
+    function handleZoomInput() {
+      const zoomInput = document.getElementById('zoomInput');
+      state.scale = parseFloat(zoomInput.value) / 100;
+      applyZoom();
+    }
+
+    function handleZoomSlider() {
+      const zoomSlider = document.getElementById('zoomSlider');
+      state.scale = zoomSlider.value / 100;
+      applyZoom();
+    }
+
+    function applyZoom() {
+      document.getElementById('svgOutput').style.transform = `scale(${state.scale})`;
+      document.getElementById('zoomInput').value = `${Math.round(state.scale * 100)}%`;
+      document.getElementById('zoomSlider').value = Math.round(state.scale * 100);
+    }
+
+    const widthInput = document.getElementById('widthInput');
+
+    widthInput.addEventListener('keydown', function(event) {
+      let value = parseInt(this.value);
+      switch (event.key) {
+        case 'ArrowUp':
+        case 'ArrowRight':
+          this.value = isNaN(value) ? 1 : value + 1;
+          event.preventDefault();
+          handleWidthInput();
+          break;
+        case 'ArrowDown':
+        case 'ArrowLeft':
+          this.value = isNaN(value) || value <= 1 ? 1 : value - 1;
+          event.preventDefault();
+          handleWidthInput();
+          break;
+      }
+    });
+  </script>
+</body>
+</html>
